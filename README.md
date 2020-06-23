@@ -9,12 +9,16 @@ Run your Minecraft server anywhere there is Docker available, powered by your cl
 
 ### Required
 `REMOTE_TYPE` = The RCLONE supported provider for file storage, this must be the same as the provider you used for the authorization below
+
 `REMOTE_RCLONE_AUTH` = The string RCLONE returns you after authorizing locally via your provider of choice using `rclone authorize "$REMOTE_TYPE"`
+
 `REMOTE_FOLDER` = Path to folder used on file storage provider
 
 #### Optional
 `STARTUP` = Startup arguments if different from `java -jar server.jar`
+
 `REMOTE_NGROK_TOKEN` = If you wish to use NGROK TCP tunneling to access this Minecraft server, please specify the token, and it will be used. Other wise default networking will be used.
+
 `REMOTE_PORT` = For ngrok mostly, specify this if your server.properties is anything other than 25565
 
 ### Notes
