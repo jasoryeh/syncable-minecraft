@@ -141,7 +141,7 @@ function syncup {
     if [[ "$SYNCPRESENT" == "true" ]]; then
         echo "Syncing changes to remote ($REMOTE_TYPE)"
         rclone -v sync ~/server main:${REMOTE_FOLDER}
-        echo "Sync-up complete. It is safe to shut off server now."
+        echo "Sync-up complete."
     else
         echo "Will not sync-up, sync wasn't complete."
         echo "Will not sync-up, sync wasn't complete."
@@ -191,7 +191,7 @@ function starttasks {
 }
 
 function gracefulshutdown {
-    echo "Caught exit signal, attempting to gracefully shutdown"
+    echo "Attempting graceful shutdown"
     echo "Asking server to save"
     sendcommand "save-all"
     echo "Asking server to stop"
@@ -201,10 +201,16 @@ function gracefulshutdown {
     echo "Cleaning up extras"
     cleanupoptionals
     echo "Gracefully shutdown"
+    exit
 }
 
-trap gracefulshutdown SIGINT
-trap gracefulshutdown SIGTERM
+function catchsignal {
+    echo "Caught exit signal, attempting to gracefully shutdown"
+    gracefulshutdown
+}
+
+trap catchsignal SIGINT
+trap catchsignal SIGTERM
 
 # setup
 cd ~
@@ -238,9 +244,9 @@ else
     echo "Noninteractive terminal detected waiting for exit of server"
     sleep 15
     while [ ! -f /syncable-exited ]; do
-        echo "Trying to tail ~/server/logs/latest.log"
-        tail -F -n 100 ~/server/logs/latest.log | grep -qx "syncable-exited"
-        sleep 5
+        #echo "Trying to tail ~/server/logs/latest.log"
+        #tail -F -n 100 ~/server/logs/latest.log | grep -qx "syncable-exited"
+        sleep 1
     done
     rm -f /syncable-exited
 fi

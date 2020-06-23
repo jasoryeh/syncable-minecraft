@@ -21,5 +21,10 @@ Run your Minecraft server anywhere there is Docker available, powered by your cl
 
 `REMOTE_PORT` = For ngrok mostly, specify this if your server.properties is anything other than 25565
 
+`AUTO_SAVE_TIMEOUT` = Defaults to 300, specifies delay between autosaves (save-all) command in the server
+
+#### Misc
+`PORT` = Provided by providers (mainly Heroku) to specify if a specific port needs to be in use to keep the container alive, we will occupy it with a python SimpleHTTPServer
+
 ### Notes
-Default ports exposed are 53682 and 25565 (with -P ?), specify more with `-p (host):(container)`
+Default port exposed is 25565 (with -P ?), specify more with `-p (host):(container)`
