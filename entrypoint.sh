@@ -10,6 +10,7 @@ fi
 
 # for checkports
 MCPORT=25565
+AUTOSAVETIMEOUT=300
 SYNCPRESENT="false"
 
 # endvars
@@ -96,7 +97,13 @@ function runoptionals {
         done
         printngrok
     fi
-    # end ngrok
+    
+    # custom save-all-task timeout
+    if [[ ! -z "${AUTO_SAVE_TIMEOUT}" ]]; then
+        echo "Custom auto-save timeout was found..."
+        AUTOSAVETIMEOUT="$((${AUTO_SAVE_TIMEOUT} + 0))"
+    fi
+    echo "Auto save timeout: $AUTOSAVETIMEOUT"
 }
 
 function cleanupoptionals {
@@ -174,8 +181,10 @@ function attachserver {
 }
 
 function starttasks {
+    # wait 60 seconds (hard coded) after startup before starting to auto-save so we can allow the server room to breath when starting up.
+    sleep 60
     while true; do
-        sleep 300
+        sleep $AUTOSAVETIMEOUT
         sendcommand "save-all"
         syncup
     done
@@ -227,6 +236,7 @@ if [ -t 0 ]; then
 else
     # non interactive
     echo "Noninteractive terminal detected waiting for exit of server"
+    sleep 15
     while [ ! -f /syncable-exited ]; do
         echo "Trying to tail ~/server/logs/latest.log"
         tail -F -n 100 ~/server/logs/latest.log | grep -qx "syncable-exited"
