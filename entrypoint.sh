@@ -1,256 +1,244 @@
 #!/bin/bash
 
-if [ -t 0 ]; then
-    echo "~"
-else
-    echo "Having an interactive terminal is recommended, even if it is detached. Server console output may be broken."
-fi
-
-# vars
-
-# for checkports
-MCPORT=25565
-AUTOSAVETIMEOUT=300
-SYNCPRESENT="false"
-
-# endvars
-
-function exports {
-    export PATH=$PATH:/userbin
+function spacer {
+    printf "$1*** *** *** *** *** $3 *** *** *** *** ***$2"
 }
 
-function debugdata {
-    whoami
-    echo $HOME
-    export
+function log_info() {
+    echo -e "\033[32m---\033[0m $1"
 }
+
+function log_warning() {
+    echo -e "\033[33m!!!\033[0m $1"
+}
+
+function log_error() {
+    echo -e "\033[31m###\033[0m $1"
+}
+
+spacer "\n" "\n" "syncable-minecraft"
+log_info "Running as user: $(whoami)"
+log_info "On platform: $(uname -a)"
+log_info "Exports/Environment Variables:"
+export
+spacer "" "\n\n"
+
+# make sure rclone can be called from here
+export PATH=$PATH:/userbin && chmod +x /userbin
 
 function checkenv {
+    spacer "" "\n" 
+    log_info "Configuring environment..."
+
     EXIT="false"
-    if [[ -z "${REMOTE_RCLONE_AUTH}" ]]; then echo "Missing REMOTE_RCLONE_AUTH environment variable, this is obtained using 'rclone authorize \"<your remote type>\"'"; EXIT="true"; else echo "REMOTE_RCLONE_AUTH = ${REMOTE_RCLONE_AUTH}"; fi
-    if [[ -z "${REMOTE_TYPE}" ]]; then echo "Missing REMOTE_TYPE environment variable, see rclone documentation for a list of supported storage system types https://rclone.org/overview/"; EXIT="true"; else echo "REMOTE_TYPE = ${REMOTE_TYPE}"; fi
-    if [[ -z "${REMOTE_FOLDER}" ]]; then echo "Missing REMOTE_FOLDER environment variable, this should be the folder you store your server files in"; EXIT="true"; else echo "REMOTE_FOLER = ${REMOTE_FOLDER}"; fi
+    if [[ -z "${STORAGE_AUTH}" ]]; then
+        log_error "Missing STORAGE_AUTH environment variable, this is obtained using 'rclone authorize \"<your remote type>\"'"
+        EXIT="true"
+    else
+        log_info "    STORAGE_AUTH = ${STORAGE_AUTH}"
+    fi
+    
+    if [[ -z "${STORAGE_TYPE}" ]]; then
+        log_error "Missing STORAGE_TYPE environment variable, see rclone documentation for a list of supported storage system types https://rclone.org/overview/"
+        EXIT="true"
+    else
+        log_info "    STORAGE_TYPE = ${STORAGE_TYPE}"
+    fi
     
     # optionals
-    if [[ -z "${STARTUP}" ]]; then echo "Missing optional environment variable (OPTIONAL)"; else echo "STARTUP = ${STARTUP}"; fi
-    if [[ -z "${REMOTE_PORT}" ]]; then echo "Missing optional REMOTE_PORT environment variable (OPTIONAL)"; else echo "REMOTE_PORT = ${REMOTE_PORT}"; fi
-    if [[ -z "${REMOTE_NGROK_TOKEN}" ]]; then echo "Missing optional REMOTE_NGROK_TOKEN environment variable (OPTIONAL)"; else echo "REMOTE_NGROK_TOKEN = ${REMOTE_NGROK_TOKEN}"; fi
+    if [[ -z "${STORAGE_FOLDER}" ]]; then
+        log_warning "(OPTIONAL) STORAGE_FOLDER environment variable is missing! Default to /syncmc"
+        STORAGE_FOLDER="/syncmc"
+    fi
+    log_info "    STORAGE_FOLDER = ${STORAGE_FOLDER}"
     
+    if [[ -z "${STARTUP}" ]]; then
+        log_warning "(OPTIONAL) STARTUP environment variable is missing!"
+        STARTUP="java  -XX:+UnlockExperimentalVMOptions -XX:+UseCGroupMemoryLimitForHeap -jar server.jar"
+    fi
+    log_info "    STARTUP = ${STARTUP}"
+
+    if [[ -z "${AUTOSAVE}" ]]; then
+        log_warning "(OPTIONAL) AUTOSAVE environment variable is missing! Using default 300 seconds!"
+        AUTOSAVE="300"
+    fi
+    log_info "    AUTOSAVE = ${AUTOSAVE}"
+
     # verify
+    printf "\n\n"
     if [[ "$EXIT" == "true" ]]; then
-        echo "Please fix your environment variables and retry"
+        log_error "Please fix your environment variables and retry"
         exit
     else
-        echo "$EXIT"
+        log_info "Information found, getting ready..."
     fi
-}
-
-function checkports {
-    # vars
-    if [[ ! -z "${REMOTE_PORT}" ]]; then
-        echo "Found alternative REMOTE_PORT"
-        MCPORT="${REMOTE_PORT}"
-    fi
-    echo "Using server port $MCPORT"
-}
-
-function printngrok {
-    if [[ ! -z "${REMOTE_NGROK_TOKEN}" ]]; then
-        echo ""
-        echo ""
-        echo ""
-        echo "*** *** *** *** *** *** *** *** *** *** *** *** *** *** ***"
-        echo "PAY ATTENTION - NGROK CONNECTION DETAILS FOLLOW:"
-        curl http://127.0.0.1:4040/api/tunnels | jq -r "."
-        echo "*** *** *** *** *** *** *** *** *** *** *** *** *** *** ***"
-        echo ""
-        echo ""
-        echo ""
-    else
-        echo "NGROK is not running"
-    fi
-}
-
-function runoptionals {
-    # heroku - binding too late problem (w/i 60 secs), so we make a web server
-    if [[ ! -z "${PORT}" ]]; then
-        echo "It appears a PORT environment variable was specified (likely heroku? We'll try to bind to it so we don't get killed (${PORT})"
-        mkdir -p ~/shs-index
-        cd ~/shs-index
-        echo "Hey!" > index.html
-        python -m SimpleHTTPServer ${PORT} &> /dev/null &
-        SIMPLEHTTPSERVERPID=$!
-        echo "SimpleHTTPServer Started"
-        cd ~
-    fi
-    
-    # ngrok - tcp tunneling mc server in casae a port can't be opened by docker host
-    if [[ ! -z "${REMOTE_NGROK_TOKEN}" ]]; then
-        echo "NGROK token found, starting ngrok..."
-        eval "ngrok tcp -authtoken $REMOTE_NGROK_TOKEN -log=stdout ${REMOTE_NGROK_OPTS} ${MCPORT} > /dev/null &"
-        NGROKPID=$!
-        echo "NGROK started ($NGROKPID)"
-        sleep 10
-        until $(curl --output /dev/null --silent --head --fail http://127.0.0.1:4040/api/tunnels | jq -r ".tunnels[0]"); do
-            printf '.'
-            sleep 15
-        done
-        printngrok
-    fi
-    
-    # custom save-all-task timeout
-    if [[ ! -z "${AUTO_SAVE_TIMEOUT}" ]]; then
-        echo "Custom auto-save timeout was found..."
-        AUTOSAVETIMEOUT="$((${AUTO_SAVE_TIMEOUT} + 0))"
-    fi
-    echo "Auto save timeout: $AUTOSAVETIMEOUT"
-}
-
-function cleanupoptionals {
-    if [[ ! -z "${REMOTE_NGROK_TOKEN}" ]]; then
-        kill -9 $NGROKPID
-        echo "NGROK closed"
-    fi
-    
-    if [[ ! -z "${PORT}" ]]; then
-        kill -9 $SIMPLEHTTPSERVERPID
-        echo "SimpleHTTPServer closed"
-    fi
-    
-    kill -9 $SVTASKSPID
+    spacer "" "\n\n"
 }
 
 function setuprclone {
+    spacer "" "\n"
+    log_info "Configuring RCLONE..."
+
     mkdir -p ~/.config/rclone
-    rm -f ~/.config/rclone/rclone.conf
-    echo "[main]" >> ~/.config/rclone/rclone.conf
-    echo "type = ${REMOTE_TYPE}" >> ~/.config/rclone/rclone.conf
+    echo "[main]" > ~/.config/rclone/rclone.conf
+    echo "type = ${STORAGE_TYPE}" >> ~/.config/rclone/rclone.conf
     echo "config_is_local = false" >> ~/.config/rclone/rclone.conf
-    echo "token = ${REMOTE_RCLONE_AUTH}" >> ~/.config/rclone/rclone.conf
+    echo "token = ${STORAGE_AUTH}" >> ~/.config/rclone/rclone.conf
+
+    log_info "RCLONE Configuration created."
+    spacer "" "\n\n"
 }
 
 function syncdown {
-    mkdir -p ~/server
-    echo "Synchronizing from remote source ($REMOTE_TYPE)"
-    rclone -v sync main:${REMOTE_FOLDER} ~/server
-    echo "Synchronized, starting server..."
-    SYNCPRESENT="true"
+    spacer "" "\n"
+    log_info "Synchronizing from remote source ($STORAGE_TYPE) -> ($STORAGE_FOLDER)"
+    rm -rf ~/server && mkdir -p ~/server && rclone -v sync main:$STORAGE_FOLDER ~/server && SYNCPRESENT="true"
+    if [[ "$SYNCPRESENT" == "true" ]]; then
+        log_info "Synchronized, starting server..."
+    else
+        log_error "Could not synchronize with storage provider! Exiting."
+        log_error "Could not synchronize with storage provider! Exiting."
+        log_error "Could not synchronize with storage provider! Exiting."
+        exit
+    fi
+    spacer "" "\n\n"
 }
 
 function syncup {
+    printf "\n"
     if [[ "$SYNCPRESENT" == "true" ]]; then
-        echo "Syncing changes to remote ($REMOTE_TYPE)"
-        rclone -v sync ~/server main:${REMOTE_FOLDER}
-        echo "Sync-up complete."
+        log_info "Syncing changes to remote ($STORAGE_TYPE) -> ($STORAGE_FOLDER)"
+        SYNCUPDONE="false" && rclone -v sync ~/server main:${STORAGE_FOLDER} && SYNCUPDONE="true"
+
+        if [[ "$SYNCUPDONE" == "true" ]]; then
+            log_info "Synchronized."
+        else
+            log_warning "Could not synchronize with storage provider!"
+        fi
     else
-        echo "Will not sync-up, sync wasn't complete."
-        echo "Will not sync-up, sync wasn't complete."
-        echo "Will not sync-up, sync wasn't complete."
+        log_warning "Not syncronizing, the original sync did not compelete!"
+        log_warning "Not syncronizing, the original sync did not compelete!"
+        log_warning "Not syncronizing, the original sync did not compelete!"
     fi
+    printf "\n"
 }
 
 function startserver {
+    spacer "" "\n"
     cd ~/server
-    STARTUPCOMMAND="java  -XX:+UnlockExperimentalVMOptions -XX:+UseCGroupMemoryLimitForHeap -jar server.jar"
-    if [[ ! -z "${STARTUP}" ]]; then
-        echo "Found alternative startup command"
-        STARTUPCOMMAND="${STARTUP}"
+    log_info "Starting server [$STARTUP]"
+
+    (while true; do sleep 1; done) | bash -c "$STARTUP" &
+    SERVER_PID=$!
+    
+    log_info "Server started with PID of ($SERVER_PID)"
+    sleep 3
+    if [[ ! -d /proc/$SERVER_PID ]]; then
+        log_error ""
+        log_error "*** *** *** *** *** *** *** *** *** ***"
+        log_error "  It looks like the server process "
+        log_error "  ended early!"
+        log_error ""
+        log_error "  Ensure the files on the storage "
+        log_error "  provider are correct, and try again."
+        log_error ""
+        log_error "  Result of ls:"
+        ls
+        log_error ""
+        log_error "  Exiting so nothing bad happens."
+        log_error "*** *** *** *** *** *** *** *** *** ***"
+        exit
     fi
-    echo "Startup -> ~ $STARTUPCOMMAND"
-    if [ -t 0 ]; then
-        #interactive
-        eval "tmux new-session -d -s syncableproc '$STARTUPCOMMAND;touch /syncable-exited'"
-    else
-        eval "tmux new-session -d -s syncableproc '$STARTUPCOMMAND; echo syncable-exited >> ~/server/logs/latest.log;touch /syncable-exited'"
-    fi
-    echo "Sessions:"
-    tmux list-sessions
-    mv ~/server/logs/latest.log ~/server/logs/$(date +"%Y-%m-%d-%H-%M-%S").log
-    #eval "$STARTUPCOMMAND"
-    cd ~
+    spacer "" "\n\n"
 }
 
 function sendcommand {
-    # -X stuff is ????
-    eval "tmux send-keys '$1' C-m"
+    if [[ ! -z $SERVER_PID ]]; then
+        log_info "Executing $* on process id $SERVER_PID"
+        if [[ -d /proc/$SERVER_PID ]]; then
+            printf "$*\n" >> /proc/$SERVER_PID/fd/0
+        else
+            log_error "Could not run command, no server!"
+        fi
+    fi
 }
 
-function attachserver {
-    echo "Attaching to syncableproc"
-    tmux attach-session -t syncableproc
+function killtasks {
+    log_info "Stopping tasks..."
+    kill -9 $TASKPIDS > /dev/null
+    log_info "Tasks stopped."
 }
 
-function starttasks {
-    # wait 60 seconds (hard coded) after startup before starting to auto-save so we can allow the server room to breath when starting up.
+function task_SAVE {
     sleep 60
+    log_info "Starting save task"
     while true; do
-        sleep $AUTOSAVETIMEOUT
+        log_info "Auto-saving..."
         sendcommand "save-all"
+        sleep $AUTOSAVE  # waits the auto save time before synchronizing, and then saves again
+        log_info "Auto-save sync..."
         syncup
     done
 }
 
+function task_WATCH {
+    while true; do
+        if [[ ! -d /proc/$SERVER_PID ]]; then
+            log_info "Server detected as turned off!"
+            log_info "Server detected as turned off!"
+            log_info "Server detected as turned off!"
+            exit
+        fi
+    done
+}
+
+function starttasks {
+    task_SAVE &
+    TASKPIDS="${TASKPIDS} $!"
+    task_WATCH &
+    TASKPIDS="${TASKPIDS} $!"
+}
+
 function gracefulshutdown {
-    echo "Attempting graceful shutdown"
-    echo "Asking server to save"
-    sendcommand "save-all"
-    echo "Asking server to stop"
+    log_info "Attempting graceful shutdown"
     sendcommand "stop"
-    echo "Synchronizing up (if possible)"
+
+    log_info "Waiting for server to stop"
+    waitForServer "... "
+    killtasks
     syncup
-    echo "Cleaning up extras"
-    cleanupoptionals
-    echo "Gracefully shutdown"
+
+    log_info "Goodbye."
     exit
 }
 
-function catchsignal {
-    echo "Caught exit signal, attempting to gracefully shutdown"
-    gracefulshutdown
+function waitForServer {
+    until [[ ! -d /proc/$SERVER_PID ]]; do
+        if [[ ! -z $* ]]; then
+            printf "$*"
+        fi
+        sleep 1
+    done
 }
 
-trap catchsignal SIGINT
-trap catchsignal SIGTERM
+# catch signals
+function catchsignal {
+    function onTerminate {
+        log_info "Caught exit signal, attempting to gracefully shutdown\n"
+        gracefulshutdown
+    }
+    trap onTerminate SIGINT
+    trap onTerminate SIGTERM
+}
+catchsignal
 
 # setup
 cd ~
-exports
-debugdata
 checkenv
-checkports
-
-# check optional features/things we need to do
-runoptionals
-
-# setup
 setuprclone
-
-# sync down
 syncdown
-
-# run, background for now
 startserver
-# save-all task for the all-important server files
-starttasks &
-SVTASKSPID=$!
-printngrok
-echo "Server is running"
-if [ -t 0 ]; then
-    # interactive
-    echo "Interactive terminal detected, attaching to server"
-    attachserver
-else
-    # non interactive
-    echo "Noninteractive terminal detected waiting for exit of server"
-    sleep 15
-    while [ ! -f /syncable-exited ]; do
-        #echo "Trying to tail ~/server/logs/latest.log"
-        #tail -F -n 100 ~/server/logs/latest.log | grep -qx "syncable-exited"
-        sleep 1
-    done
-    rm -f /syncable-exited
-fi
-# reattach
+starttasks
+waitForServer
 
-# shutdown
 gracefulshutdown
