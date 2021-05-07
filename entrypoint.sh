@@ -1,29 +1,17 @@
 #!/bin/bash
 
-function spacer {
-    printf "$1*** *** *** *** *** $3 *** *** *** *** ***$2"
-}
-
-function log_info() {
-    echo -e "\033[32m---\033[0m $1"
-}
-
-function log_warning() {
-    echo -e "\033[33m!!!\033[0m $1"
-}
-
-function log_error() {
-    echo -e "\033[31m###\033[0m $1"
-}
+source ./logger.sh
 
 spacer "\n" "\n" "syncable-minecraft"
 log_info "Running as user: $(whoami)"
 log_info "On platform: $(uname -a)"
+log_info "CPU Information (lscpu):"
+lscpu
 log_info "Exports/Environment Variables:"
 export
 spacer "" "\n\n"
 
-# make sure rclone can be called from here
+# make sure rclone and other manually installed binaries can be called from here
 export PATH=$PATH:/userbin && chmod +x /userbin
 
 function checkenv {
@@ -150,11 +138,11 @@ function startserver {
 
     # check if this server is locked by another instance
     if [[ -f SYNCABLE_LOCK ]]; then
-        if [[ ! -z LOCK_OVERRIDE ]]; then
-            log_warning "Overriding the lock file."
+        log_error "Found SYNCABLE_LOCK lock file!"
+        if [[ ! -z $LOCK_OVERRIDE ]]; then
+            log_warning "  Overriding the lock file."
             unlock
         else
-            log_error "Found SYNCABLE_LOCK lock file!"
             log_error "  This server is currently locked"
             log_error "  by another instance of this "
             log_error "  container! Use LOCK_OVERRIDE "
@@ -264,6 +252,14 @@ function waitForServer {
     done
 }
 
+function optionalFeatures {
+    # these features run on their own, and wont be given notification of any events
+    cd /
+    bash ngrok.sh &
+    TASKPIDS="${TASKPIDS} $!"
+    cd -
+}
+
 # catch signals
 function catchsignal {
     function onTerminate {
@@ -283,12 +279,16 @@ syncdown
 
 startserver
 starttasks
+optionalFeatures
 
 # wait for server, send commands while next
 until [[ ! -d /proc/$SERVER_PID ]]; do
     # a limitation for now... in order for other things to work
-    read -t 10 tempcmd
+    read -t 3 tempcmd
     if [[ ! -z $tempcmd ]]; then
+        if [[ "$tempcmd" == "_syncable ngrok" ]]; then
+            bash /ngrokinfo.sh &
+        fi
         sendcommand "$tempcmd"
     fi
     #sleep 1
