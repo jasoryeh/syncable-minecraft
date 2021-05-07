@@ -123,10 +123,50 @@ function syncup {
     printf "\n"
 }
 
+function lock {
+    cd ~/server
+    printf "syncable-minecraft\n" > SYNCABLE_LOCK
+    printf "$HOSTNAME\n" >> SYNCABLE_LOCK
+    printf "$(curl https://checkip.amazonaws.com) $(date)\n" >> SYNCABLE_LOCK
+    printf "$(cat server.properties | grep server-port)" >> SYNCABLE_LOCK
+    if [[ -z $1 ]]; then
+        syncup
+    fi
+    cd -
+}
+
+function unlock {
+    cd ~/server
+    rm -f SYNCABLE_LOCK
+    if [[ -z $1 ]]; then
+        syncup
+    fi
+    cd -
+}
+
 function startserver {
     spacer "" "\n"
     cd ~/server
+
+    # check if this server is locked by another instance
+    if [[ -f SYNCABLE_LOCK ]]; then
+        if [[ ! -z LOCK_OVERRIDE ]]; then
+            log_warning "Overriding the lock file."
+            unlock
+        else
+            log_error "Found SYNCABLE_LOCK lock file!"
+            log_error "  This server is currently locked"
+            log_error "  by another instance of this "
+            log_error "  container! Use LOCK_OVERRIDE "
+            log_error "  if you are absolutely sure "
+            log_error "  that there is no other server "
+            log_error "  running. "
+            exit
+        fi
+    fi
+
     log_info "Starting server [$STARTUP]"
+    lock
 
     (while true; do sleep 1; done) | bash -c "$STARTUP" &
     SERVER_PID=$!
@@ -147,8 +187,10 @@ function startserver {
         log_error ""
         log_error "  Exiting so nothing bad happens."
         log_error "*** *** *** *** *** *** *** *** *** ***"
-        exit
+        unlock
+        gracefulshutdown
     fi
+    cd -
     spacer "" "\n\n"
 }
 
@@ -205,6 +247,7 @@ function gracefulshutdown {
 
     log_info "Waiting for server to stop"
     waitForServer "... "
+    unlock "nosync"
     killtasks
     syncup
 
@@ -237,6 +280,7 @@ cd ~
 checkenv
 setuprclone
 syncdown
+
 startserver
 starttasks
 
