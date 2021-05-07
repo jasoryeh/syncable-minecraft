@@ -239,6 +239,12 @@ setuprclone
 syncdown
 startserver
 starttasks
-waitForServer
+
+# wait for server, send commands while next
+until [[ ! -d /proc/$SERVER_PID ]]; do
+    read tempcmd
+    sendcommand "$tempcmd"
+    #sleep 1
+done
 
 gracefulshutdown
