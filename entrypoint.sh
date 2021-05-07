@@ -242,8 +242,11 @@ starttasks
 
 # wait for server, send commands while next
 until [[ ! -d /proc/$SERVER_PID ]]; do
-    read tempcmd
-    sendcommand "$tempcmd"
+    # a limitation for now... in order for other things to work
+    read -t 10 tempcmd
+    if [[ ! -z $tempcmd ]]; then
+        sendcommand "$tempcmd"
+    fi
     #sleep 1
 done
 
