@@ -288,8 +288,11 @@ until [[ ! -d /proc/$SERVER_PID ]]; do
     if [[ ! -z $tempcmd ]]; then
         if [[ "$tempcmd" == "_syncable ngrok" ]]; then
             bash /ngrokinfo.sh &
+        elif [[ "$tempcmd" == "_syncable syncup" ]]; then
+            syncup
+        else
+            sendcommand "$tempcmd"
         fi
-        sendcommand "$tempcmd"
     fi
     #sleep 1
 done
