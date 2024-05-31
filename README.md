@@ -27,9 +27,7 @@ On the storage provider you choose to use:
 
 `LOCK_OVERRIDE` = This container tries to make your server have a predictable state by using a SYNCABLE_LOCK file to show that the server is currently in use. Sometimes (such as when a server goes down unexpectedly), this doesn't get deleted and you may need to use this lock override to tell the container it is safe to proceed. It can be any value as long as it exists.
 
-`NGROK_AUTH` = Tries to start NGROK with your authentication key on `NGROK_PORT` (default 25565 if not specified), use `_syncable ngrok` while the server is running to display ngrok tunnel information.
-
-`NGROK_PORT` = NGROK port if other than 25565.
+`SIMULTANEOUS_CMD` = A command to run in the background, maybe for your own SSH tunnel?
 
 ### Notes
 Default port exposed is 25565 (with -P ?), specify more with `-p (host):(container)` or if your server wants to use a different port.

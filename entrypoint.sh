@@ -42,7 +42,7 @@ function checkenv {
     
     if [[ -z "${STARTUP}" ]]; then
         log_warning "(OPTIONAL) STARTUP environment variable is missing!"
-        STARTUP="java  -XX:+UnlockExperimentalVMOptions -XX:+UseCGroupMemoryLimitForHeap -jar server.jar"
+        STARTUP="java -jar server.jar"
     fi
     log_info "    STARTUP = ${STARTUP}"
 
@@ -255,8 +255,13 @@ function waitForServer {
 function optionalFeatures {
     # these features run on their own, and wont be given notification of any events
     cd /
-    bash ngrok.sh &
-    TASKPIDS="${TASKPIDS} $!"
+    #bash sometask.sh &
+    #TASKPIDS="${TASKPIDS} $!"
+    if [[ ! -z $SIMULTANEOUS_CMD ]]; then
+        echo "Running $SIMULTANEOUS_CMD"
+        eval $SIMULTANEOUS_CMD &
+        TASKPIDS="${TASKPIDS} $!"
+    fi
     cd -
 }
 
@@ -286,9 +291,7 @@ until [[ ! -d /proc/$SERVER_PID ]]; do
     # a limitation for now... in order for other things to work
     read -t 3 tempcmd
     if [[ ! -z $tempcmd ]]; then
-        if [[ "$tempcmd" == "_syncable ngrok" ]]; then
-            bash /ngrokinfo.sh &
-        elif [[ "$tempcmd" == "_syncable syncup" ]]; then
+        if [[ "$tempcmd" == "_syncable syncup" ]]; then
             syncup
         else
             sendcommand "$tempcmd"
