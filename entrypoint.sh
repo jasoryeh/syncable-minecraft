@@ -85,8 +85,6 @@ function syncdown {
         log_info "Synchronized, starting server..."
     else
         log_error "Could not synchronize with storage provider! Exiting."
-        log_error "Could not synchronize with storage provider! Exiting."
-        log_error "Could not synchronize with storage provider! Exiting."
         exit
     fi
     spacer "" "\n\n"
@@ -104,9 +102,7 @@ function syncup {
             log_warning "Could not synchronize with storage provider!"
         fi
     else
-        log_warning "Not syncronizing, the original sync did not compelete!"
-        log_warning "Not syncronizing, the original sync did not compelete!"
-        log_warning "Not syncronizing, the original sync did not compelete!"
+        log_warning "Not syncronizing, the original sync did not complete!"
     fi
     printf "\n"
 }
@@ -214,8 +210,6 @@ function task_SAVE {
 function task_WATCH {
     while true; do
         if [[ ! -d /proc/$SERVER_PID ]]; then
-            log_info "Server detected as turned off!"
-            log_info "Server detected as turned off!"
             log_info "Server detected as turned off!"
             exit
         fi
