@@ -2,10 +2,10 @@ FROM alpine
 
 ARG JDK=openjdk8
 
-MAINTAINER Jason Ho <jason@jasonho.tk>
+MAINTAINER Jason Ho <docker@hogt.me>
 
 # dependencies
-RUN apk add bash curl wget unzip jq python3 tmux openssh $JDK
+RUN apk add bash curl wget unzip jq python3 tmux openssh util-linux-misc $JDK
 # for adding binaries
 RUN mkdir -p /userbin && cd /userbin && chmod -R 777 /userbin
 RUN curl https://rclone.org/install.sh | bash
